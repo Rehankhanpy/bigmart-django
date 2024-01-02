@@ -29,16 +29,16 @@ class banner(models.Model):
 
 
 class Product(models.Model):
-       name = models.CharField(max_length=100, unique=True)
-       slug = models.CharField(max_length=150, unique=True)
-       description = models.TextField(max_length=500, blank=True)
-       price = models.IntegerField()
-       image = models.ImageField(upload_to='photos/products')
-       stock = models.IntegerField()
-       is_available = models.BooleanField(default=True)
-       category = models.ForeignKey(category, on_delete=models.CASCADE)
-       created_date = models.DateTimeField(auto_now_add=True)
-       modified_date = models.DateTimeField(auto_now=True)
+       name            = models.CharField(max_length=100, unique=True)
+       slug            = models.CharField(max_length=150, unique=True)
+       description     = models.TextField(max_length=500, blank=True)
+       price           = models.IntegerField()
+       image           = models.ImageField(upload_to='photos/products')
+       stock           = models.IntegerField()
+       is_available    = models.BooleanField(default=True)
+       category        = models.ForeignKey(category, on_delete=models.CASCADE)
+       created_date    = models.DateTimeField(auto_now_add=True)
+       modified_date   = models.DateTimeField(auto_now=True)
 
        def __str__(self):
               return self.name
@@ -78,6 +78,7 @@ class MyAccountManager(BaseUserManager):
               user.is_active     = True
               user.is_staff      = True
               user.is_superadmin = True
+
               user.save(using=self._db)
               return user
 

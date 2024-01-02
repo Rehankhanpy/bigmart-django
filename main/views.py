@@ -3,8 +3,21 @@ from .models import *
 from django.http import HttpResponse
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db.models import Q
+from .forms import *
+from django.contrib import messages, auth
+from django.contrib.auth.decorators import login_required
+
+# Verification E-mail
+from django.contrib.sites.shortcuts import get_current_site
+from django.template.loader import render_to_string
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes
+from django.contrib.auth.tokens import default_token_generator
+from django.core.mail import EmailMessage 
+
 
 # Create your views here.
+@login_required(login_url = 'login')
 def index(request):
        context = {
               'banner':banner.objects.all(),
@@ -16,7 +29,7 @@ def index(request):
        return render(request, 'index.html', context)
 
 
-
+@login_required(login_url = 'login')
 def store(request, category_slug=None):
        categories = None
        products = None
@@ -67,6 +80,7 @@ def _cart_id(request):
               Cart = request.session.create()
        return Cart
 
+@login_required(login_url = 'login')
 def add_cart(request, product_id):
        product = Product.objects.get(id=product_id)
        product_variation = []
@@ -74,12 +88,12 @@ def add_cart(request, product_id):
        if request.method == 'POST':
               for item in request.POST:
                      key = item
-                     value = request.POST[key]
+                     value = request.POST[key]   
 
                      try:
                             Variation = variation.objects.get(product=product, variation_category__iexact=key, variation_value__iexact=value)
                             product_variation.append(Variation)
-                     
+                                                       
                      except:
                             pass
 
@@ -186,7 +200,7 @@ def Cart(request, total=0, quantity=0, cart_items=None):
 
        return render(request, 'cart.html', context)
 
-
+@login_required(login_url = 'login')
 def search(request):
        if 'keyword' in request.GET:
               keyword = request.GET['keyword']
@@ -203,24 +217,160 @@ def search(request):
 
 
 
+def register(request):
+       if request.method == 'POST':
+              form = RegistrationForm(request.POST)
+              if form.is_valid():
+                     first_name = form.cleaned_data['firstname']
+                     last_name = form.cleaned_data['lastname']
+                     phone_number = form.cleaned_data['phone_number']
+                     email = form.cleaned_data['email']
+                     password = form.cleaned_data['password']
+                     username = email.split('@')[0]
+
+                     user = Accounts.objects.create_user(firstname=first_name, username=username, lastname=last_name, email=email, password=password)
+                     user.phone_number = phone_number
+                     user.save()
+
+                     # user activation
+                     current_site = get_current_site(request)
+                     mail_subject = 'Please activate your account'
+                     message = render_to_string('acc_verification_email.html', {
+                            'user':user,
+                            'domain':current_site,
+                            'uid':urlsafe_base64_encode(force_bytes(user.pk)),
+                            'token':default_token_generator.make_token(user),
+                     })
+                     print(current_site)
+                     to_email = email
+                     send_email = EmailMessage(mail_subject, message, to=[to_email])
+                     send_email.send()
+
+                     # messages.success(request, 'Registration Successful')
+                     return redirect('/login/?command=verification&email='+email)
+
+       else:
+              form = RegistrationForm()
+       context = {
+              'form':form,
+       }
+       return render(request, 'register.html', context)
+
+
+def login(request):
+       if request.method == 'POST':
+              email = request.POST['email']
+              password = request.POST['password']
+              user = auth.authenticate(email=email, password=password)
+              
+              if user is not None:
+                     auth.login(request, user)
+                     messages.success(request, 'You Are Now Logged In ')
+                     return redirect('dashboard')
+              else:
+                     messages.error(request, 'Invalid login credentials')
+                     return redirect('login')
+
+       return render(request, 'login.html')
+
+@login_required(login_url = 'login')
+def logout(request):
+       auth.logout(request)
+       messages.success(request, 'Logged Out Successfully')
+       return redirect('login')
+
+
+def activate(request, uidb64, token):
+       try:  
+              uid = urlsafe_base64_decode(uidb64).decode()
+              user = Accounts._default_manager.get(pk=uid)
+       except(TypeError, ValueError, OverflowError, Accounts.DoesNotExist):
+              user = None
+
+       if user is not None and default_token_generator.check_token(user, token):
+              user.is_active = True
+              user.save()
+              messages.success(request, 'Congratulations! Your account is activated.')
+              return redirect('login')
+       else:
+              messages.error(request, 'Invalid activation link')
+              return redirect('register')
+       
+
+
+@login_required(login_url = 'login')
+def dashboard(request):
+       return render(request, 'dashboard.html')
+
+
+def forgotPassword(request):
+       if request.method == 'POST':
+              email = request.POST['email']
+              if Accounts.objects.filter(email=email).exists():
+                     user = Accounts.objects.get(email__exact=email)
+                     # Reset password email
+
+                     current_site = get_current_site(request)
+                     mail_subject = 'Reset Your Password'
+                     message = render_to_string('reset_password_email.html', {
+                            'user':user,
+                            'domain':current_site,
+                            'uid':urlsafe_base64_encode(force_bytes(user.pk)),
+                            'token':default_token_generator.make_token(user),
+                     })
+                     print(current_site)
+                     to_email = email
+                     send_email = EmailMessage(mail_subject, message, to=[to_email])
+                     send_email.send()
+
+                     messages.success(request, 'Password reset email has been sent to your email address')
+                     return redirect('login')
+
+              else:
+                     messages.error(request, 'Account does not exist')
+                     return redirect('forgotPassword')
+              
+
+       return render(request, 'forgotPassword.html')
+
+
+def resetpassword_validate(request, uidb64, token):
+       try:  
+              uid = urlsafe_base64_decode(uidb64).decode()
+              user = Accounts._default_manager.get(pk=uid)
+       except(TypeError, ValueError, OverflowError, Accounts.DoesNotExist):
+              user = None
+
+       if user is not None and default_token_generator.check_token(user, token):
+              request.session['uid'] = uid
+              messages.success(request, 'Please reset your password')
+              return redirect('resetPassword')
+       else:
+              messages.error(request, 'This link has been expired')
+              return redirect('login')
+
+
+def resetPassword(request):
+       if request.method == 'POST':
+              password = request.POST['password']
+              confirm_password = request.POST['confirm_password']
+
+              if password == confirm_password:
+                     uid = request.session.get('uid')
+                     user = Accounts.objects.get(pk=uid)
+                     user.set_password(password)
+                     user.save()
+                     messages.success(request, 'Password reset successfully')
+                     return redirect('login')
+              else:
+                     messages.error(request, 'Passwords are Not same')
+                     return redirect('resetPassword')
+       else:
+              return render(request, 'resetPassword.html')
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+ 
 
 
 

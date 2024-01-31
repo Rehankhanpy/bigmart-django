@@ -29,7 +29,7 @@ def index(request):
        return render(request, 'index.html', context)
 
 
-@login_required(login_url = 'login')
+
 def store(request, category_slug=None):
        categories = None
        products = None
@@ -80,14 +80,14 @@ def _cart_id(request):
               Cart = request.session.create()
        return Cart
 
-@login_required(login_url = 'login')
+
 def add_cart(request, product_id):
        product = Product.objects.get(id=product_id)
        product_variation = []
 
        if request.method == 'POST':
               for item in request.POST:
-                     key = item
+                     key   = item
                      value = request.POST[key]   
 
                      try:
@@ -110,7 +110,7 @@ def add_cart(request, product_id):
        does_cart_item_exist = cartitem.objects.filter(product=product, cart=Cart).exists()
        if does_cart_item_exist:
               cart_item = cartitem.objects.filter(product=product, cart=Cart)
-              print(cart_item)
+              
               # existing variations -> database
               # current variations -> product variation
               # item_id -> database
@@ -178,8 +178,13 @@ def remove_cart_item(request, product_id, cart_item_id):
 
 def Cart(request, total=0, quantity=0, cart_items=None):
        try:
-              Cart = cart.objects.get(cart_id=_cart_id(request))
-              cart_items = cartitem.objects.filter(cart=Cart, is_active=True)
+              tax = 0
+              grand_total = 0
+              if request.user.is_authenticated:
+                     cart_items = cartitem.objects.filter(user=request.user, is_active=True)
+              else:
+                     Cart = cart.objects.get(cart_id=_cart_id(request))
+                     cart_items = cartitem.objects.filter(cart=Cart, is_active=True)
               for cart_item in cart_items:
                      total += (cart_item.product.price * cart_item.quantity)
                      quantity = cart_item.quantity
@@ -187,7 +192,7 @@ def Cart(request, total=0, quantity=0, cart_items=None):
               tax = (3 * total)/100
               grand_total = total + tax
 
-       except ObjectNotExist:
+       except cart.DoesNotExist:
               pass
 
        context = {
@@ -261,10 +266,25 @@ def login(request):
        if request.method == 'POST':
               email = request.POST['email']
               password = request.POST['password']
-              user = auth.authenticate(email=email, password=password)
+              User = auth.authenticate(email=email, password=password)
               
-              if user is not None:
-                     auth.login(request, user)
+              if User is not None:
+                     try:
+                            print('try')
+                            Cart = cart.objects.get(cart_id=_cart_id(request))
+                            print(Cart)
+                            does_cart_item_exist = cartitem.objects.filter(cart=Cart).exists()
+                            print(does_cart_item_exist)
+                            if does_cart_item_exist:
+                                   cart_item = cartitem.objects.filter(cart=Cart)
+
+                                   for item in cart_item:
+                                          item.user = User
+                                          item.save()
+                     except:
+                            print('hi')
+                            pass
+                     auth.login(request, User)
                      messages.success(request, 'You Are Now Logged In ')
                      return redirect('dashboard')
               else:
@@ -369,7 +389,31 @@ def resetPassword(request):
               return render(request, 'resetPassword.html')
 
 
+@login_required(login_url = 'login')
+def checkout(request, total=0, quantity=0, cart_items=None):
+       try:
+              tax = 0
+              grand_total = 0
+              Cart = cart.objects.get(cart_id=_cart_id(request))
+              cart_items = cartitem.objects.filter(cart=Cart, is_active=True)
+              for cart_item in cart_items:
+                     total += (cart_item.product.price * cart_item.quantity)
+                     quantity = cart_item.quantity
 
+              tax = (3 * total)/100
+              grand_total = total + tax
+
+       except cart.DoesNotExist:
+              pass
+
+       context = {
+              "total":total,
+              "quantity":quantity,
+              "cart_items":cart_items,
+              "grand_total":grand_total,
+              "tax":tax,
+       }
+       return render(request, 'checkout.html', context)
  
 
 

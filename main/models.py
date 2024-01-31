@@ -152,9 +152,10 @@ class variation(models.Model):
 
 
 class cartitem(models.Model):
+       user = models.ForeignKey(Accounts, on_delete=models.CASCADE, null=True)
        variations = models.ManyToManyField(variation, blank=True)
        product = models.ForeignKey(Product, on_delete=models.CASCADE)
-       cart = models.ForeignKey(cart, on_delete=models.CASCADE)
+       cart = models.ForeignKey(cart, on_delete=models.CASCADE, null=True)
        quantity = models.IntegerField()
        is_active = models.BooleanField(default=True)
 
